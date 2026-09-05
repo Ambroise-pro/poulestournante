@@ -241,6 +241,11 @@
 
                 <!-- Footer et Boutons IA -->
                 <div class="mt-12 text-center border-t border-slate-200 pt-8 space-y-4">
+                    <button id="copy-results-button" class="w-full md:w-auto mx-auto flex items-center justify-center gap-2 text-white font-semibold py-3 px-6 rounded-lg shadow-md transition-all duration-300 bg-gradient-to-r from-emerald-600 to-teal-500 hover:from-emerald-700 hover:to-teal-600">
+                        <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg>
+                        <span id="copy-results-button-label">Copier les résultats</span>
+                    </button>
+                    <p class="text-xs text-slate-400">Copie le classement et les matchs joués, puis ouvre le Carnet d'entraînement dans un nouvel onglet.</p>
                     <button id="reset-button" class="text-slate-500 hover:text-red-600 hover:underline flex items-center justify-center gap-2 mx-auto">
                         <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="23 4 23 10 17 10"></polyline><polyline points="1 20 1 14 7 14"></polyline><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"></path></svg>
                         Recommencer (tout effacer)
@@ -322,6 +327,9 @@
         const matchesToPlayCount = document.getElementById('matches-to-play-count');
         const matchesPlayedCount = document.getElementById('matches-played-count');
         const copyScoreboardButton = document.getElementById('copy-scoreboard-button');
+        const copyResultsButton = document.getElementById('copy-results-button');
+        const copyResultsButtonLabel = document.getElementById('copy-results-button-label');
+        const CARNET_URL = 'https://carnetentrainementv2.vercel.app/';
 
         // Modaux
         const scoreModal = document.getElementById('score-modal');
@@ -1016,6 +1024,91 @@
             setTimeout(() => statsModal.classList.add('hidden'), 300);
         }
 
+        // --- COPIE DES RÉSULTATS VERS LE CARNET D'ENTRAÎNEMENT ---
+        function buildResultsHtml() {
+            const playedMatches = selectedMatchesForTournament.filter(m => m.winner !== null);
+
+            const rankingRows = lastScoreboard.map((p, i) => {
+                const ga = p.goalAverage > 0 ? `+${p.goalAverage}` : p.goalAverage;
+                return `<tr><td>${i + 1}</td><td>${escapeHtml(p.name)}</td><td>${p.totalPoints}</td><td>${ga}</td><td>${p.totalMatchesPlayed}</td></tr>`;
+            }).join('');
+
+            const matchRows = playedMatches.map((m, i) => {
+                const teamA = escapeHtml(m.teamA.players.map(p => p.name).join(', '));
+                const teamB = escapeHtml(m.teamB.players.map(p => p.name).join(', '));
+                const result = m.winner === 'D' ? 'Match nul' : (m.winner === 'A' ? 'Victoire équipe A' : 'Victoire équipe B');
+                return `<tr><td>${i + 1}</td><td>${teamA}</td><td>${m.scoreA} - ${m.scoreB}</td><td>${teamB}</td><td>${result}</td></tr>`;
+            }).join('');
+
+            return `
+                <h3>Résultats — Poules tournantes VB</h3>
+                <p><strong>${playedMatches.length}</strong> match(s) joué(s) sur ${selectedMatchesForTournament.length} · Objectif : ${MIN_MATCH_TARGET} matchs par joueur · Barème : V${pointsConfig.win} / N${pointsConfig.draw} / D${pointsConfig.loss}</p>
+                <h4>Classement</h4>
+                <table>
+                    <thead><tr><th>#</th><th>Joueur</th><th>Pts</th><th>GA</th><th>Joués</th></tr></thead>
+                    <tbody>${rankingRows}</tbody>
+                </table>
+                <h4>Matchs joués</h4>
+                <table>
+                    <thead><tr><th>#</th><th>Équipe A</th><th>Score</th><th>Équipe B</th><th>Résultat</th></tr></thead>
+                    <tbody>${matchRows}</tbody>
+                </table>
+            `.trim();
+        }
+
+        function buildResultsText() {
+            const playedMatches = selectedMatchesForTournament.filter(m => m.winner !== null);
+            const lines = [];
+            lines.push('Résultats — Poules tournantes VB');
+            lines.push(`${playedMatches.length} match(s) joué(s) sur ${selectedMatchesForTournament.length} — Objectif : ${MIN_MATCH_TARGET} matchs par joueur — Barème : V${pointsConfig.win}/N${pointsConfig.draw}/D${pointsConfig.loss}`);
+            lines.push('');
+            lines.push('Classement :');
+            lastScoreboard.forEach((p, i) => {
+                const ga = p.goalAverage > 0 ? `+${p.goalAverage}` : p.goalAverage;
+                lines.push(`${i + 1}. ${p.name} — ${p.totalPoints} pts (GA ${ga}, ${p.totalMatchesPlayed} joués)`);
+            });
+            lines.push('');
+            lines.push('Matchs joués :');
+            playedMatches.forEach((m, i) => {
+                const teamA = m.teamA.players.map(p => p.name).join(', ');
+                const teamB = m.teamB.players.map(p => p.name).join(', ');
+                const result = m.winner === 'D' ? 'Match nul' : (m.winner === 'A' ? 'Victoire équipe A' : 'Victoire équipe B');
+                lines.push(`${i + 1}. ${teamA} ${m.scoreA} - ${m.scoreB} ${teamB} (${result})`);
+            });
+            return lines.join('\n');
+        }
+
+        // Écrit simultanément text/plain et text/html sur le presse-papiers.
+        // Fonctionne de façon fiable sur iPad/Safari, contrairement à
+        // navigator.clipboard.write(ClipboardItem).
+        function copyResultsToClipboard(html, text) {
+            function handler(e) {
+                e.clipboardData.setData('text/plain', text);
+                e.clipboardData.setData('text/html', `<!--CARNET_MATCH_RESULTS_V1-->${html}`);
+                e.preventDefault();
+            }
+            document.addEventListener('copy', handler);
+            const ok = document.execCommand('copy');
+            document.removeEventListener('copy', handler);
+            return ok;
+        }
+
+        async function onCopyResultsClick() {
+            if (lastScoreboard.length === 0) return;
+            const html = buildResultsHtml();
+            const text = buildResultsText();
+            const ok = copyResultsToClipboard(html, text);
+
+            if (!ok) {
+                try { await navigator.clipboard.writeText(text); } catch (e) { console.error(e); }
+            }
+
+            copyResultsButtonLabel.textContent = 'Résultats copiés !';
+            setTimeout(() => { copyResultsButtonLabel.textContent = 'Copier les résultats'; }, 2000);
+
+            window.open(CARNET_URL, '_blank');
+        }
+
         // --- LISTENERS ---
         playerCountSelect.addEventListener('change', updatePlayerInputs);
         startButton.addEventListener('click', startTournament);
@@ -1037,6 +1130,7 @@
             }
             setTimeout(() => { copyScoreboardButton.title = originalTitle; }, 1500);
         });
+        copyResultsButton.addEventListener('click', onCopyResultsClick);
 
         modalCancelButton.addEventListener('click', closeScoreModal);
         modalConfirmButton.addEventListener('click', handleScoreSubmission);
