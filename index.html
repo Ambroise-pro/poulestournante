@@ -106,7 +106,7 @@
 
         <!-- Bandeau logo -->
         <div class="flex items-center justify-center gap-3 mb-8">
-            <img src="logo.png" alt="Logo de l'application" class="h-14 w-auto rounded-lg shadow-sm">
+            <img src="logo.png" alt="Logo de l'application" class="h-14 w-auto rounded-lg shadow-sm" onerror="this.style.display='none'">
             <div>
                 <p class="text-xs font-semibold uppercase tracking-[0.18em] text-indigo-600">Poules tournantes VB</p>
             </div>
@@ -294,6 +294,13 @@
         let pointsConfig = { win: 3, draw: 2, loss: 1 };
         let currentMatchIdToScore = null;
         let justFinishedMatchId = null;
+        let lastScoreboard = [];
+
+        function escapeHtml(str) {
+            return String(str).replace(/[&<>"']/g, ch => ({
+                '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'
+            }[ch]));
+        }
 
         // --- ÉLÉMENTS DU DOM ---
         const screens = { setup: document.getElementById('screen-setup'), main: document.getElementById('screen-main') };
@@ -645,18 +652,21 @@
             }
             
             const match = selectedMatchesForTournament.find(m => m.id === matchId);
-            if (match && match.winner) undoMatchResult(matchId);
+            const isEdit = !!(match && match.winner);
+            if (isEdit) undoMatchResult(matchId);
 
-            recordResult(matchId, scoreA, scoreB);
+            recordResult(matchId, scoreA, scoreB, isEdit);
             closeScoreModal();
             renderAll();
         }
 
-        function recordResult(matchId, scoreA, scoreB) {
+        function recordResult(matchId, scoreA, scoreB, isEdit) {
             const match = selectedMatchesForTournament.find(m => m.id === matchId);
             if (!match || match.winner) return;
 
-            justFinishedMatchId = match.id; // Set the state for the next render
+            // Ne montre l'écran "résultat" que pour un match qui vient d'être joué,
+            // pas quand on corrige le score d'un match déjà dans l'historique.
+            justFinishedMatchId = isEdit ? null : match.id;
 
             match.scoreA = scoreA;
             match.scoreB = scoreB;
@@ -722,6 +732,7 @@
                 if (a.goalAverage !== b.goalAverage) return b.goalAverage - a.goalAverage;
                 return a.name.localeCompare(b.name);
             });
+            lastScoreboard = sortedPlayers;
 
             let showFooter = false;
             sortedPlayers.forEach((player, index) => {
@@ -738,8 +749,8 @@
                 row.innerHTML = `
                     <td class="py-3 px-1 font-medium text-slate-700">${index + 1}</td>
                     <td class="py-3 px-1 font-semibold text-indigo-800 flex items-center gap-2">
-                        <span>${player.name}</span>
-                        <button data-action="stats" data-player-name="${player.name}" class="p-1 text-slate-400 hover:text-indigo-600 rounded-full transition-colors">
+                        <span>${escapeHtml(player.name)}</span>
+                        <button data-action="stats" data-player-name="${escapeHtml(player.name)}" class="p-1 text-slate-400 hover:text-indigo-600 rounded-full transition-colors">
                             <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20v-6M4.2 16.2l3.6-3.6M4 10h6M4.2 7.8 7.8 4.2M12 4v6M19.8 7.8l-3.6 3.6M20 10h-6M19.8 16.2l-3.6-3.6"/></svg>
                         </button>
                     </td>
@@ -801,9 +812,9 @@
                 if (nextMatch) {
                     matchesToPlayCount.textContent = selectedMatchesForTournament.filter(m => m.winner === null).length;
                     
-                    const teamANames = nextMatch.teamA.players.map((p, i) => `<span class="player-pill player-pill-a player-pill-animated" style="animation-delay: ${100 + i * 100}ms">${p.name}</span>`).join('');
-                    const teamBNames = nextMatch.teamB.players.map((p, i) => `<span class="player-pill player-pill-b player-pill-animated" style="animation-delay: ${400 + i * 100}ms">${p.name}</span>`).join('');
-                    const refereeNames = nextMatch.referees.length > 0 ? `Arbitre(s): ${nextMatch.referees.map(p => p.name).join(', ')}` : 'Aucun arbitre';
+                    const teamANames = nextMatch.teamA.players.map((p, i) => `<span class="player-pill player-pill-a player-pill-animated" style="animation-delay: ${100 + i * 100}ms">${escapeHtml(p.name)}</span>`).join('');
+                    const teamBNames = nextMatch.teamB.players.map((p, i) => `<span class="player-pill player-pill-b player-pill-animated" style="animation-delay: ${400 + i * 100}ms">${escapeHtml(p.name)}</span>`).join('');
+                    const refereeNames = nextMatch.referees.length > 0 ? `Arbitre(s): ${escapeHtml(nextMatch.referees.map(p => p.name).join(', '))}` : 'Aucun arbitre';
 
                     const matchElement = document.createElement('div');
                     matchElement.className = 'p-6 md:p-8 border border-slate-200 rounded-2xl bg-white shadow-lg animate-fade-in';
@@ -823,7 +834,7 @@
                             </div>
                         </div>
                         <div class="text-center text-sm text-slate-500 mt-6 mb-6">${refereeNames}</div>
-                        <button data-action="score" data-match-id="${nextMatch.id}" class="w-full bg-gradient-to-r from-indigo-600 to-blue-500 text-white text-lg font-semibold py-4 px-4 rounded-lg hover:from-indigo-700 hover:to-blue-600 transition-all shadow-md">
+                        <button data-action="score" data-match-id="${escapeHtml(nextMatch.id)}" class="w-full bg-gradient-to-r from-indigo-600 to-blue-500 text-white text-lg font-semibold py-4 px-4 rounded-lg hover:from-indigo-700 hover:to-blue-600 transition-all shadow-md">
                             Saisir le score de ce match
                         </button>
                     `;
@@ -851,13 +862,13 @@
                         const winnerName = (match.winner === 'A') ? `<strong class="text-indigo-700">Équipe A</strong>` : `<strong class="text-green-700">Équipe B</strong>`;
                         resultText = `${winnerName} <span class="text-slate-800">a gagné</span>`;
                     }
-                    const refereeNames = match.referees.length > 0 ? `Arbitre(s): ${match.referees.map(p => p.name).join(', ')}` : 'Aucun arbitre';
+                    const refereeNames = match.referees.length > 0 ? `Arbitre(s): ${escapeHtml(match.referees.map(p => p.name).join(', '))}` : 'Aucun arbitre';
                     const matchElement = document.createElement('div');
                     matchElement.className = 'p-3 border border-slate-200 rounded-lg bg-slate-50';
                     matchElement.innerHTML = `
                         <div class="flex justify-between items-start">
                             <div><p>${resultText} <strong class="text-slate-900 ml-2">${scoreDisplay}</strong></p><p class="text-xs text-slate-500">${refereeNames}</p></div>
-                            <button data-action="edit" data-match-id="${match.id}" class="p-2 -mt-1 -mr-1 text-slate-400 hover:text-indigo-600 rounded-lg transition-colors"><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path></svg></button>
+                            <button data-action="edit" data-match-id="${escapeHtml(match.id)}" class="p-2 -mt-1 -mr-1 text-slate-400 hover:text-indigo-600 rounded-lg transition-colors"><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path></svg></button>
                         </div>
                     `;
                     matchesPlayedList.appendChild(matchElement);
@@ -945,8 +956,8 @@
                 })[0];
 
                 return {
-                    bestTeammate: bestTeammate ? `${bestTeammate[0]} (${bestTeammate[1].wins}V/${bestTeammate[1].matches}m)` : 'Pas encore de partenaire fétiche',
-                    nemesis: nemesis ? `${nemesis[0]} (${nemesis[1].wins} défaites contre)` : 'Pas de bête noire',
+                    bestTeammate: bestTeammate ? `${escapeHtml(bestTeammate[0])} (${bestTeammate[1].wins}V/${bestTeammate[1].matches}m)` : 'Pas encore de partenaire fétiche',
+                    nemesis: nemesis ? `${escapeHtml(nemesis[0])} (${nemesis[1].wins} défaites contre)` : 'Pas de bête noire',
                 };
             }
 
@@ -992,7 +1003,7 @@
                     
                     const div = document.createElement('div');
                     div.className = 'p-3 border border-slate-200 rounded-lg bg-slate-50';
-                    div.innerHTML = `<p class="text-indigo-700 font-medium">Avec : ${partners}</p><p class="text-sm">Contre : ${otherTeam.players.map(p => p.name).join(', ')}</p><p class="text-sm mt-1">${resultHTML}</p>`;
+                    div.innerHTML = `<p class="text-indigo-700 font-medium">Avec : ${escapeHtml(partners)}</p><p class="text-sm">Contre : ${escapeHtml(otherTeam.players.map(p => p.name).join(', '))}</p><p class="text-sm mt-1">${resultHTML}</p>`;
                     statsModalContent.appendChild(div);
                 });
             }
@@ -1009,9 +1020,22 @@
         playerCountSelect.addEventListener('change', updatePlayerInputs);
         startButton.addEventListener('click', startTournament);
         resetButton.addEventListener('click', resetApp);
-        copyScoreboardButton.addEventListener('click', () => {
-            // Logique de copie simplifiée
-            alert("Fonctionnalité de copie simulée (pour l'instant).");
+        copyScoreboardButton.addEventListener('click', async () => {
+            if (lastScoreboard.length === 0) return;
+            const text = lastScoreboard.map((player, index) => {
+                const ga = player.goalAverage > 0 ? `+${player.goalAverage}` : player.goalAverage;
+                return `${index + 1}. ${player.name} — ${player.totalPoints} pts (GA ${ga}, ${player.totalMatchesPlayed} joués)`;
+            }).join('\n');
+
+            const originalTitle = copyScoreboardButton.title;
+            try {
+                await navigator.clipboard.writeText(text);
+                copyScoreboardButton.title = 'Copié !';
+            } catch (e) {
+                console.error(e);
+                copyScoreboardButton.title = 'Échec de la copie';
+            }
+            setTimeout(() => { copyScoreboardButton.title = originalTitle; }, 1500);
         });
 
         modalCancelButton.addEventListener('click', closeScoreModal);
