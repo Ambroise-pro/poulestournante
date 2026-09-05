@@ -1025,32 +1025,75 @@
         }
 
         // --- COPIE DES RÉSULTATS VERS LE CARNET D'ENTRAÎNEMENT ---
+        // Le Carnet ne conserve, sur l'attribut style, que : color, background-color,
+        // background, font-weight, font-style, text-align, text-decoration, border,
+        // border-collapse, padding, width, max-width. Tout le style doit donc être
+        // inline avec uniquement ces propriétés (pas de classes CSS, pas de <style>).
         function buildResultsHtml() {
             const playedMatches = selectedMatchesForTournament.filter(m => m.winner !== null);
 
+            const tableStyle = 'border-collapse:collapse;width:100%;max-width:600px';
+            const thStyle = 'background:linear-gradient(90deg,#4f46e5,#3b82f6);color:#ffffff;padding:8px 10px;text-align:left;border:1px solid #4338ca;font-weight:bold';
+            const thCenterStyle = `${thStyle};text-align:center`;
+            const tdStyle = 'padding:8px 10px;border:1px solid #e2e8f0;text-align:center';
+            const tdLeftStyle = 'padding:8px 10px;border:1px solid #e2e8f0;text-align:left';
+
             const rankingRows = lastScoreboard.map((p, i) => {
                 const ga = p.goalAverage > 0 ? `+${p.goalAverage}` : p.goalAverage;
-                return `<tr><td>${i + 1}</td><td>${escapeHtml(p.name)}</td><td>${p.totalPoints}</td><td>${ga}</td><td>${p.totalMatchesPlayed}</td></tr>`;
+                const rowStyle = i === 0 ? 'background-color:#fef3c7'
+                    : (i % 2 === 1 ? 'background-color:#f8fafc' : 'background-color:#ffffff');
+                return `<tr style="${rowStyle}">
+                    <td style="${tdStyle};font-weight:bold">${i + 1}</td>
+                    <td style="${tdLeftStyle}">${escapeHtml(p.name)}</td>
+                    <td style="${tdStyle};font-weight:bold;color:#4338ca">${p.totalPoints}</td>
+                    <td style="${tdStyle}">${ga}</td>
+                    <td style="${tdStyle}">${p.totalMatchesPlayed}</td>
+                </tr>`;
             }).join('');
+
+            const resultStyle = (winner) => {
+                if (winner === 'D') return 'background-color:#f1f5f9;color:#475569;font-weight:bold';
+                if (winner === 'A') return 'background-color:#e0e7ff;color:#3730a3;font-weight:bold';
+                return 'background-color:#dcfce7;color:#15803d;font-weight:bold';
+            };
 
             const matchRows = playedMatches.map((m, i) => {
                 const teamA = escapeHtml(m.teamA.players.map(p => p.name).join(', '));
                 const teamB = escapeHtml(m.teamB.players.map(p => p.name).join(', '));
                 const result = m.winner === 'D' ? 'Match nul' : (m.winner === 'A' ? 'Victoire équipe A' : 'Victoire équipe B');
-                return `<tr><td>${i + 1}</td><td>${teamA}</td><td>${m.scoreA} - ${m.scoreB}</td><td>${teamB}</td><td>${result}</td></tr>`;
+                const rowStyle = i % 2 === 1 ? 'background-color:#f8fafc' : 'background-color:#ffffff';
+                return `<tr style="${rowStyle}">
+                    <td style="${tdStyle}">${i + 1}</td>
+                    <td style="${tdLeftStyle}">${teamA}</td>
+                    <td style="${tdStyle};font-weight:bold">${m.scoreA} - ${m.scoreB}</td>
+                    <td style="${tdLeftStyle}">${teamB}</td>
+                    <td style="${tdStyle};${resultStyle(m.winner)}">${result}</td>
+                </tr>`;
             }).join('');
 
             return `
-                <h3>Résultats — Poules tournantes VB</h3>
+                <h3 style="color:#4338ca">Résultats — Poules tournantes VB</h3>
                 <p><strong>${playedMatches.length}</strong> match(s) joué(s) sur ${selectedMatchesForTournament.length} · Objectif : ${MIN_MATCH_TARGET} matchs par joueur · Barème : V${pointsConfig.win} / N${pointsConfig.draw} / D${pointsConfig.loss}</p>
-                <h4>Classement</h4>
-                <table>
-                    <thead><tr><th>#</th><th>Joueur</th><th>Pts</th><th>GA</th><th>Joués</th></tr></thead>
+                <h4 style="color:#1e293b">Classement</h4>
+                <table style="${tableStyle}">
+                    <thead><tr>
+                        <th style="${thStyle}">#</th>
+                        <th style="${thStyle}">Joueur</th>
+                        <th style="${thCenterStyle}">Pts</th>
+                        <th style="${thCenterStyle}">GA</th>
+                        <th style="${thCenterStyle}">Joués</th>
+                    </tr></thead>
                     <tbody>${rankingRows}</tbody>
                 </table>
-                <h4>Matchs joués</h4>
-                <table>
-                    <thead><tr><th>#</th><th>Équipe A</th><th>Score</th><th>Équipe B</th><th>Résultat</th></tr></thead>
+                <h4 style="color:#1e293b">Matchs joués</h4>
+                <table style="${tableStyle}">
+                    <thead><tr>
+                        <th style="${thStyle}">#</th>
+                        <th style="${thStyle}">Équipe A</th>
+                        <th style="${thCenterStyle}">Score</th>
+                        <th style="${thStyle}">Équipe B</th>
+                        <th style="${thStyle}">Résultat</th>
+                    </tr></thead>
                     <tbody>${matchRows}</tbody>
                 </table>
             `.trim();
