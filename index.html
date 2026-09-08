@@ -291,6 +291,24 @@
         </div>
     </div>
 
+    <!-- MODAL DE CHOIX D'ENVOI VERS LE CARNET -->
+    <div id="carnet-choice-modal" class="modal hidden fixed inset-0 z-50 items-center justify-center p-4 bg-black bg-opacity-60 opacity-0" onclick="closeCarnetChoiceModal()">
+        <div class="modal-panel bg-white w-full max-w-md p-6 rounded-2xl shadow-xl opacity-0 scale-95" onclick="event.stopPropagation()">
+            <h3 class="text-xl font-semibold mb-2 text-slate-800">Envoyer vers le Carnet</h3>
+            <p class="text-sm text-slate-500 mb-6">Comment veux-tu récupérer ces résultats ?</p>
+            <div class="space-y-3">
+                <button id="carnet-choice-open" class="w-full flex items-center justify-center gap-2 text-white font-semibold py-3 px-4 rounded-lg shadow-md transition-all duration-300 bg-gradient-to-r from-emerald-600 to-teal-500 hover:from-emerald-700 hover:to-teal-600">
+                    📱 J'ai ma tablette — Ouvrir mon carnet
+                </button>
+                <button id="carnet-choice-save" class="w-full flex items-center justify-center gap-2 text-slate-700 font-semibold py-3 px-4 rounded-lg border border-slate-300 hover:bg-slate-100 transition-colors">
+                    💾 Je n'ai pas ma tablette — Enregistrer pour plus tard
+                </button>
+            </div>
+            <div id="carnet-choice-feedback" class="text-center text-sm text-emerald-600 font-medium mt-4 h-5"></div>
+            <button id="carnet-choice-cancel" class="w-full text-center text-sm text-slate-400 hover:text-slate-600 mt-2">Annuler</button>
+        </div>
+    </div>
+
     <script>
         // --- VARIABLES GLOBALES ---
         let allPlayers = []; 
@@ -328,7 +346,6 @@
         const matchesPlayedCount = document.getElementById('matches-played-count');
         const copyScoreboardButton = document.getElementById('copy-scoreboard-button');
         const copyResultsButton = document.getElementById('copy-results-button');
-        const copyResultsButtonLabel = document.getElementById('copy-results-button-label');
         const CARNET_URL = 'https://carnetentrainementv2.vercel.app/';
 
         // Modaux
@@ -348,7 +365,14 @@
         const statsModalTitle = document.getElementById('stats-modal-title');
         const statsModalContent = document.getElementById('stats-modal-content');
         const statsModalCloseButton = document.getElementById('stats-modal-close');
-        
+
+        const carnetChoiceModal = document.getElementById('carnet-choice-modal');
+        const carnetChoiceModalPanel = carnetChoiceModal.querySelector('.modal-panel');
+        const carnetChoiceOpenButton = document.getElementById('carnet-choice-open');
+        const carnetChoiceSaveButton = document.getElementById('carnet-choice-save');
+        const carnetChoiceCancelButton = document.getElementById('carnet-choice-cancel');
+        const carnetChoiceFeedback = document.getElementById('carnet-choice-feedback');
+
         // Bandeau
         const resumeBanner = document.getElementById('resume-banner');
         const resumeContinueButton = document.getElementById('resume-continue-button');
@@ -1024,11 +1048,12 @@
             setTimeout(() => statsModal.classList.add('hidden'), 300);
         }
 
-        // --- COPIE DES RÉSULTATS VERS LE CARNET D'ENTRAÎNEMENT ---
-        // Le Carnet ne conserve, sur l'attribut style, que : color, background-color,
-        // background, font-weight, font-style, text-align, text-decoration, border,
-        // border-collapse, padding, width, max-width. Tout le style doit donc être
-        // inline avec uniquement ces propriétés (pas de classes CSS, pas de <style>).
+        // --- ENVOI DES RÉSULTATS VERS LE CARNET D'ENTRAÎNEMENT ---
+        // Le Carnet ne conserve, sur l'attribut style (au collage comme à l'import), que :
+        // color, background-color, background, font-weight, font-style, font-size,
+        // text-align, text-decoration, border, border-collapse, padding, width, max-width.
+        // Tout le style doit donc être inline avec uniquement ces propriétés
+        // (pas de classes CSS, pas de <style>).
         function buildResultsHtml() {
             const playedMatches = selectedMatchesForTournament.filter(m => m.winner !== null);
 
@@ -1127,7 +1152,7 @@
         function copyResultsToClipboard(html, text) {
             function handler(e) {
                 e.clipboardData.setData('text/plain', text);
-                e.clipboardData.setData('text/html', `<!--CARNET_MATCH_RESULTS_V1-->${html}`);
+                e.clipboardData.setData('text/html', `<!--CARNET_RESULTS_V1-->${html}`);
                 e.preventDefault();
             }
             document.addEventListener('copy', handler);
@@ -1136,8 +1161,51 @@
             return ok;
         }
 
-        async function onCopyResultsClick() {
+        // Télécharge un .json (html + text) que le Carnet sait relire via son
+        // bouton "Importer", pour l'élève qui n'a pas sa tablette sous la main.
+        function exportResultsToFile(html, text) {
+            const payload = {
+                format: 'carnet-contenu-externe',
+                version: 1,
+                generatedAt: new Date().toISOString(),
+                html,
+                text
+            };
+            const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' });
+            const fileName = `carnet-resultats-${new Date().toISOString().slice(0, 10)}.json`;
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = fileName;
+            document.body.appendChild(a);
+            a.click();
+            a.remove();
+            setTimeout(() => URL.revokeObjectURL(url), 1000);
+        }
+
+        function flashCarnetChoiceFeedback(message) {
+            carnetChoiceFeedback.textContent = message;
+            setTimeout(() => { carnetChoiceFeedback.textContent = ''; }, 2000);
+        }
+
+        function openCarnetChoiceModal() {
             if (lastScoreboard.length === 0) return;
+            carnetChoiceFeedback.textContent = '';
+            carnetChoiceModal.classList.remove('hidden');
+            setTimeout(() => {
+                carnetChoiceModal.classList.remove('opacity-0');
+                carnetChoiceModalPanel.classList.remove('opacity-0', 'scale-95');
+            }, 10);
+        }
+
+        function closeCarnetChoiceModal() {
+            carnetChoiceModal.classList.add('opacity-0');
+            carnetChoiceModalPanel.classList.add('opacity-0', 'scale-95');
+            setTimeout(() => carnetChoiceModal.classList.add('hidden'), 300);
+        }
+
+        // Choix A : copier dans le presse-papiers puis ouvrir le Carnet dans un nouvel onglet.
+        async function onOpenCarnetClick() {
             const html = buildResultsHtml();
             const text = buildResultsText();
             const ok = copyResultsToClipboard(html, text);
@@ -1146,10 +1214,16 @@
                 try { await navigator.clipboard.writeText(text); } catch (e) { console.error(e); }
             }
 
-            copyResultsButtonLabel.textContent = 'Résultats copiés !';
-            setTimeout(() => { copyResultsButtonLabel.textContent = 'Copier les résultats'; }, 2000);
-
+            closeCarnetChoiceModal();
             window.open(CARNET_URL, '_blank');
+        }
+
+        // Choix B : enregistrer un fichier à importer plus tard dans le Carnet.
+        function onSaveForLaterClick() {
+            const html = buildResultsHtml();
+            const text = buildResultsText();
+            exportResultsToFile(html, text);
+            flashCarnetChoiceFeedback('Fichier enregistré ! Importe-le dans ton Carnet une fois ta tablette récupérée.');
         }
 
         // --- LISTENERS ---
@@ -1173,12 +1247,16 @@
             }
             setTimeout(() => { copyScoreboardButton.title = originalTitle; }, 1500);
         });
-        copyResultsButton.addEventListener('click', onCopyResultsClick);
+        copyResultsButton.addEventListener('click', openCarnetChoiceModal);
+        carnetChoiceOpenButton.addEventListener('click', onOpenCarnetClick);
+        carnetChoiceSaveButton.addEventListener('click', onSaveForLaterClick);
+        carnetChoiceCancelButton.addEventListener('click', closeCarnetChoiceModal);
+        carnetChoiceModal.addEventListener('click', (e) => { if (e.target === carnetChoiceModal) closeCarnetChoiceModal(); });
 
         modalCancelButton.addEventListener('click', closeScoreModal);
         modalConfirmButton.addEventListener('click', handleScoreSubmission);
         scoreModal.addEventListener('click', (e) => { if (e.target === scoreModal) closeScoreModal(); });
-        
+
         statsModal.addEventListener('click', (e) => { if (e.target === statsModal) closeStatsModal(); });
         statsModalCloseButton.addEventListener('click', closeStatsModal);
         
