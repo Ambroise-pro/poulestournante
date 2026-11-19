@@ -353,7 +353,15 @@
                         <input type="number" id="teacher-pool-points-loss" value="1" min="0" class="w-full p-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:outline-none">
                     </div>
                 </div>
+                <div id="teacher-pool-eps-class-picker" class="hidden mb-4">
+                    <label for="teacher-pool-eps-class-select" class="block text-sm font-medium text-slate-600 mb-1">Classe EPS Manager</label>
+                    <select id="teacher-pool-eps-class-select" class="w-full p-3 border border-slate-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:outline-none">
+                        <option value="">— Saisie manuelle —</option>
+                    </select>
+                    <p class="text-xs text-slate-500 mt-1">Choisis une classe pour cocher directement les élèves de cette poule ci-dessous.</p>
+                </div>
                 <label class="block text-sm font-medium text-slate-600 mb-2">Noms des joueurs de cette poule</label>
+                <div id="teacher-pool-eps-roster" class="hidden grid grid-cols-1 md:grid-cols-2 gap-x-4 mb-4"></div>
                 <div id="teacher-pool-names-container" class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4"></div>
                 <div id="teacher-pool-error" class="text-red-600 text-center font-medium mb-4 h-5"></div>
                 <button id="teacher-add-pool-button" class="w-full md:w-auto mx-auto flex items-center justify-center gap-2 text-white font-semibold py-3 px-6 rounded-lg shadow-md transition-all duration-300 bg-gradient-to-r from-indigo-600 to-blue-500 hover:from-indigo-700 hover:to-blue-600">
@@ -469,6 +477,9 @@
         </div>
     </div>
 
+    <!-- Intégration EPS Manager (ignorée si l'app n'est pas ouverte comme module associé) -->
+    <script src="eps-sdk.js"></script>
+
     <script>
         // --- VARIABLES GLOBALES ---
         let appRole = null; // 'teacher' | 'student'
@@ -484,6 +495,7 @@
         let teacherPools = [];
         let activeQrScanner = null;
         let teacherManualEntryPoolId = null;
+        let epsClasses = []; // classes reçues d'EPS Manager, si l'app est ouverte comme module associé
 
         function escapeHtml(str) {
             return String(str).replace(/[&<>"']/g, ch => ({
@@ -579,6 +591,9 @@
         const teacherPoolPointsDrawInput = document.getElementById('teacher-pool-points-draw');
         const teacherPoolPointsLossInput = document.getElementById('teacher-pool-points-loss');
         const teacherPoolNamesContainer = document.getElementById('teacher-pool-names-container');
+        const teacherPoolEpsClassPicker = document.getElementById('teacher-pool-eps-class-picker');
+        const teacherPoolEpsClassSelect = document.getElementById('teacher-pool-eps-class-select');
+        const teacherPoolEpsRoster = document.getElementById('teacher-pool-eps-roster');
         const teacherPoolError = document.getElementById('teacher-pool-error');
         const teacherAddPoolButton = document.getElementById('teacher-add-pool-button');
         const teacherPoolsCount = document.getElementById('teacher-pools-count');
@@ -676,6 +691,7 @@
                 showScreen('teacher');
                 loadTeacherPools();
                 updateTeacherPoolNameInputs();
+                initEpsManagerIntegration();
                 renderTeacherPools();
             } else if (role === 'student') {
                 appRole = 'student';
@@ -693,6 +709,7 @@
                 showScreen('teacher');
                 loadTeacherPools();
                 updateTeacherPoolNameInputs();
+                initEpsManagerIntegration();
                 renderTeacherPools();
             } else {
                 loadState();
@@ -1670,6 +1687,7 @@
                 players: allPlayers.map(p => p.name),
                 target: MIN_MATCH_TARGET,
                 points: [pointsConfig.win, pointsConfig.draw, pointsConfig.loss],
+                totalMatches: selectedMatchesForTournament.length,
                 matches
             });
         }
@@ -1713,18 +1731,38 @@
 
         function addTeacherPool() {
             const name = teacherPoolNameInput.value.trim();
-            const nameInputs = teacherPoolNamesContainer.querySelectorAll('input');
-            const players = Array.from(nameInputs).map(input => input.value.trim());
             const target = parseInt(teacherPoolTargetInput.value, 10);
             const winPoints = parseInt(teacherPoolPointsWinInput.value, 10);
             const drawPoints = parseInt(teacherPoolPointsDrawInput.value, 10);
             const lossPoints = parseInt(teacherPoolPointsLossInput.value, 10);
+            const epsClassId = teacherPoolEpsClassSelect && teacherPoolEpsClassSelect.value ? teacherPoolEpsClassSelect.value : null;
 
             teacherPoolError.textContent = '';
             if (!name) { teacherPoolError.textContent = 'Donne un nom à la poule.'; return; }
             if (teacherPools.some(p => p.name === name)) { teacherPoolError.textContent = 'Une poule porte déjà ce nom.'; return; }
-            if (players.some(p => p === '')) { teacherPoolError.textContent = 'Remplis tous les noms.'; return; }
-            if (new Set(players).size !== players.length) { teacherPoolError.textContent = 'Noms uniques requis.'; return; }
+
+            let players, playerEpsIds;
+            if (epsClassId) {
+                const checked = Array.from(teacherPoolEpsRoster.querySelectorAll('input[type="checkbox"]:checked'));
+                const expectedCount = parseInt(teacherPoolPlayerCountSelect.value, 10);
+                if (checked.length !== expectedCount) {
+                    teacherPoolError.textContent = `Coche exactement ${expectedCount} élève(s) (actuellement ${checked.length}).`;
+                    return;
+                }
+                players = checked.map(cb => cb.dataset.name);
+                playerEpsIds = checked.map(cb => cb.value);
+                if (new Set(players).size !== players.length) {
+                    teacherPoolError.textContent = 'Deux élèves cochés ont un nom affiché identique : décoche-en un.';
+                    return;
+                }
+            } else {
+                const nameInputs = teacherPoolNamesContainer.querySelectorAll('input');
+                players = Array.from(nameInputs).map(input => input.value.trim());
+                playerEpsIds = null;
+                if (players.some(p => p === '')) { teacherPoolError.textContent = 'Remplis tous les noms.'; return; }
+                if (new Set(players).size !== players.length) { teacherPoolError.textContent = 'Noms uniques requis.'; return; }
+            }
+
             if (isNaN(target) || target < 1) { teacherPoolError.textContent = 'Objectif invalide.'; return; }
             const pointsInvalid = [winPoints, drawPoints, lossPoints].some(p => isNaN(p) || p < 0);
             if (pointsInvalid || (winPoints === 0 && drawPoints === 0 && lossPoints === 0)) { teacherPoolError.textContent = 'Barème invalide.'; return; }
@@ -1733,6 +1771,8 @@
                 id: generatePoolId(),
                 name,
                 players,
+                playerEpsIds,
+                epsClassId,
                 target,
                 points: { win: winPoints, draw: drawPoints, loss: lossPoints },
                 results: null
@@ -1741,7 +1781,98 @@
             renderTeacherPools();
 
             teacherPoolNameInput.value = '';
-            updateTeacherPoolNameInputs();
+            if (epsClassId) { renderEpsRosterPicker(); } else { updateTeacherPoolNameInputs(); }
+        }
+
+        // --- INTÉGRATION EPS MANAGER (ignorée si l'app n'est pas ouverte comme module associé) ---
+        function initEpsManagerIntegration() {
+            if (!window.EPSManager || !EPSManager.available()) return;
+            teacherPoolEpsClassPicker.classList.remove('hidden');
+            refreshEpsClassOptions();
+            teacherPoolEpsClassSelect.addEventListener('change', renderEpsRosterPicker);
+            EPSManager.onChange(() => { refreshEpsClassOptions(); });
+        }
+
+        function refreshEpsClassOptions() {
+            epsClasses = EPSManager.classes();
+            const previousValue = teacherPoolEpsClassSelect.value;
+            teacherPoolEpsClassSelect.innerHTML = '<option value="">— Saisie manuelle —</option>' +
+                epsClasses.map(c => `<option value="${escapeHtml(c.id)}">${escapeHtml(c.name)}</option>`).join('');
+            const focus = EPSManager.focus();
+            if (previousValue && epsClasses.some(c => c.id === previousValue)) {
+                teacherPoolEpsClassSelect.value = previousValue;
+            } else if (focus && focus.classId) {
+                teacherPoolEpsClassSelect.value = focus.classId;
+            }
+            renderEpsRosterPicker();
+        }
+
+        function renderEpsRosterPicker() {
+            const classId = teacherPoolEpsClassSelect.value;
+            if (!classId) {
+                teacherPoolEpsRoster.innerHTML = '';
+                teacherPoolEpsRoster.classList.add('hidden');
+                teacherPoolNamesContainer.classList.remove('hidden');
+                return;
+            }
+            teacherPoolNamesContainer.classList.add('hidden');
+            teacherPoolEpsRoster.classList.remove('hidden');
+            const cls = epsClasses.find(c => c.id === classId);
+            const students = cls ? cls.students.slice().sort((a, b) => (a.last + a.first).localeCompare(b.last + b.first, 'fr')) : [];
+            teacherPoolEpsRoster.innerHTML = students.map(s => {
+                const name = EPSManager.fullName(s);
+                let badge = '';
+                if (s.inapt) badge = ` <span class="text-amber-600 text-xs">(inapte)</span>`;
+                else if (s.attendance && s.attendance !== 'Présent') badge = ` <span class="text-red-500 text-xs">(${escapeHtml(s.attendance)})</span>`;
+                return `<label class="flex items-center gap-2 py-1 text-sm text-slate-700">
+                    <input type="checkbox" value="${escapeHtml(s.id)}" data-name="${escapeHtml(name)}">
+                    <span>${escapeHtml(name)}${badge}</span>
+                </label>`;
+            }).join('') || '<p class="text-sm text-slate-400 col-span-2">Aucun élève dans cette classe.</p>';
+        }
+
+        // Une poule est "terminée" quand tous ses matchs (schedule complet) ont été joués —
+        // condition requise avant d'envoyer quoi que ce soit vers EPS Manager.
+        function isPoolComplete(pool) {
+            if (!pool.results) return false;
+            if (typeof pool.results.totalMatches !== 'number') return true; // anciens résultats sans ce champ
+            return pool.results.matches.length >= pool.results.totalMatches;
+        }
+
+        function buildPoolSummaryText(pool) {
+            const lines = [];
+            lines.push(`Poules tournantes VB — ${pool.name}`);
+            lines.push(`${pool.results.matches.length} match(s) joué(s)`);
+            lines.push('');
+            lines.push('Classement :');
+            pool.results.scoreboard.forEach((p, i) => {
+                const ga = p.goalAverage > 0 ? `+${p.goalAverage}` : p.goalAverage;
+                lines.push(`${i + 1}. ${p.name} — ${p.totalPoints} pts (GA ${ga}, ${p.totalMatchesPlayed} joués)`);
+            });
+            return lines.join('\n');
+        }
+
+        function exportPoolToEpsManager(pool) {
+            if (!window.EPSManager || !EPSManager.available()) return;
+            if (!isPoolComplete(pool)) return;
+
+            const total = pool.results.scoreboard.length;
+            const date = EPSManager.today();
+
+            pool.results.scoreboard.forEach((p, i) => {
+                const idx = pool.players.indexOf(p.name);
+                const epsId = idx >= 0 && pool.playerEpsIds ? pool.playerEpsIds[idx] : null;
+                if (!epsId) return; // élève saisi manuellement : pas d'identifiant EPS Manager, pas d'envoi individuel
+
+                const ga = p.goalAverage > 0 ? `+${p.goalAverage}` : String(p.goalAverage);
+                EPSManager.result({ key: `poulestournante:${pool.id}:rang:${epsId}`, studentId: epsId, label: 'Poules tournantes · Classement', value: `${i + 1}e/${total}`, unit: '', date });
+                EPSManager.result({ key: `poulestournante:${pool.id}:points:${epsId}`, studentId: epsId, label: 'Poules tournantes · Points', value: String(p.totalPoints), unit: 'pts', date });
+                EPSManager.result({ key: `poulestournante:${pool.id}:ga:${epsId}`, studentId: epsId, label: 'Poules tournantes · Goal average', value: ga, unit: '', date });
+            });
+
+            if (pool.epsClassId) {
+                EPSManager.summary({ key: `poulestournante:${pool.id}:resume`, classId: pool.epsClassId, text: buildPoolSummaryText(pool), date });
+            }
         }
 
         function formatShortDate(iso) {
@@ -1875,9 +2006,11 @@
                     m.teamB.players.map(p => pool.players.indexOf(p.name)),
                     m.winner, m.scoreA, m.scoreB
                 ]),
-                players: pool.players
+                players: pool.players,
+                totalMatches: selectedMatchesForTournament.length
             };
             saveTeacherPools();
+            exportPoolToEpsManager(pool);
         }
 
         function exitManualResultsEntry() {
@@ -1944,6 +2077,8 @@
                     id: payload.id || generatePoolId(),
                     name: payload.name || 'Poule importée',
                     players: payload.players,
+                    playerEpsIds: null,
+                    epsClassId: null,
                     target: payload.target,
                     points: resultPoints,
                     results: null
@@ -1954,10 +2089,12 @@
                 receivedAt: new Date().toISOString(),
                 scoreboard,
                 matches: payload.matches,
-                players: payload.players
+                players: payload.players,
+                totalMatches: payload.totalMatches
             };
 
             saveTeacherPools();
+            exportPoolToEpsManager(pool);
             renderTeacherPools();
             alert(`Résultats de "${pool.name}" bien reçus !`);
         }

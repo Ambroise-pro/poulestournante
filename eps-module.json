@@ -1,0 +1,7 @@
+{
+  "name": "Poules tournantes VB",
+  "description": "Génère des poules tournantes de volley-ball (3v3) et renvoie le classement de chaque poule une fois terminée.",
+  "entry": "index.html",
+  "adapter": "eps-adapter.js",
+  "version": "1.0.0"
+}
