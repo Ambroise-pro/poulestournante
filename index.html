@@ -229,6 +229,7 @@
             </h1>
             
             <div id="generation-info" class="bg-indigo-50 text-indigo-700 p-4 rounded-lg text-center font-medium text-sm mb-8"></div>
+            <p id="teacher-manual-banner" class="hidden bg-amber-50 text-amber-700 border border-amber-200 rounded-lg p-3 text-center text-sm font-medium mb-6"></p>
 
             <div id="dashboard-content" class="hidden">
                 <!-- Layout flex (mobile-first) -->
@@ -277,8 +278,8 @@
                     </div>
                 </div>
 
-                <!-- Footer et Boutons IA -->
-                <div class="mt-12 text-center border-t border-slate-200 pt-8 space-y-4">
+                <!-- Footer et Boutons IA (élève) -->
+                <div id="student-dashboard-actions" class="mt-12 text-center border-t border-slate-200 pt-8 space-y-4">
                     <button id="copy-results-button" class="w-full md:w-auto mx-auto flex items-center justify-center gap-2 text-white font-semibold py-3 px-6 rounded-lg shadow-md transition-all duration-300 bg-gradient-to-r from-emerald-600 to-teal-500 hover:from-emerald-700 hover:to-teal-600">
                         <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg>
                         <span id="copy-results-button-label">Copier les résultats</span>
@@ -295,6 +296,17 @@
                         Recommencer (tout effacer)
                     </button>
                     <button id="main-change-role-button" class="block mx-auto text-xs text-slate-400 hover:text-slate-600 underline">Changer de rôle</button>
+                </div>
+
+                <!-- Footer et Boutons IA (enseignant, saisie manuelle) -->
+                <div id="teacher-manual-actions" class="hidden mt-12 text-center border-t border-slate-200 pt-8 space-y-4">
+                    <button id="teacher-manual-back-button" class="w-full md:w-auto mx-auto flex items-center justify-center gap-2 text-white font-semibold py-3 px-6 rounded-lg shadow-md transition-all duration-300 bg-gradient-to-r from-indigo-600 to-blue-500 hover:from-indigo-700 hover:to-blue-600">
+                        ⬅️ Retour à mes poules
+                    </button>
+                    <button id="teacher-manual-reset-button" class="text-slate-500 hover:text-red-600 hover:underline flex items-center justify-center gap-2 mx-auto">
+                        <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="23 4 23 10 17 10"></polyline><polyline points="1 20 1 14 7 14"></polyline><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"></path></svg>
+                        Réinitialiser les matchs de cette poule
+                    </button>
                 </div>
             </div>
         </div>
@@ -471,6 +483,7 @@
         let currentPoolName = '';
         let teacherPools = [];
         let activeQrScanner = null;
+        let teacherManualEntryPoolId = null;
 
         function escapeHtml(str) {
             return String(str).replace(/[&<>"']/g, ch => ({
@@ -572,6 +585,11 @@
         const teacherPoolsList = document.getElementById('teacher-pools-list');
         const teacherScanResultsButton = document.getElementById('teacher-scan-results-button');
         const teacherResetButton = document.getElementById('teacher-reset-button');
+        const teacherManualBanner = document.getElementById('teacher-manual-banner');
+        const studentDashboardActions = document.getElementById('student-dashboard-actions');
+        const teacherManualActions = document.getElementById('teacher-manual-actions');
+        const teacherManualBackButton = document.getElementById('teacher-manual-back-button');
+        const teacherManualResetButton = document.getElementById('teacher-manual-reset-button');
 
         // Bandeau
         const resumeBanner = document.getElementById('resume-banner');
@@ -581,6 +599,10 @@
 
         // --- LOGIQUE DE PERSISTANCE (localStorage) ---
         function saveState() {
+            if (teacherManualEntryPoolId) {
+                syncManualSessionToPool();
+                return;
+            }
             try {
                 const state = { allPlayers, selectedMatchesForTournament, MIN_MATCH_TARGET, pointsConfig, currentPoolId, currentPoolName };
                 localStorage.setItem('tournamentData_v7', JSON.stringify(state));
@@ -665,6 +687,7 @@
 
         function chooseRole(role) {
             appRole = role;
+            teacherManualEntryPoolId = null;
             try { localStorage.setItem('appRole_v1', role); } catch (e) { console.error(e); }
             if (role === 'teacher') {
                 showScreen('teacher');
@@ -679,6 +702,7 @@
         function changeRole() {
             try { localStorage.removeItem('appRole_v1'); } catch (e) { console.error(e); }
             appRole = null;
+            teacherManualEntryPoolId = null;
             showScreen('role');
         }
 
@@ -1709,6 +1733,7 @@
                     </div>
                     <div class="flex flex-wrap gap-2">
                         <button data-teacher-action="show-qr" data-pool-id="${pool.id}" class="py-2 px-3 text-sm font-medium bg-indigo-100 text-indigo-700 rounded-lg hover:bg-indigo-200 transition-colors">📱 QR de la poule</button>
+                        <button data-teacher-action="manual-results" data-pool-id="${pool.id}" class="py-2 px-3 text-sm font-medium bg-slate-100 text-slate-700 rounded-lg hover:bg-slate-200 transition-colors">✏️ Saisir manuellement</button>
                         ${pool.results ? `<button data-teacher-action="view-results" data-pool-id="${pool.id}" class="py-2 px-3 text-sm font-medium bg-emerald-100 text-emerald-700 rounded-lg hover:bg-emerald-200 transition-colors">📊 Résultats</button>` : ''}
                         <button data-teacher-action="delete-pool" data-pool-id="${pool.id}" class="py-2 px-3 text-sm text-slate-400 hover:text-red-600 transition-colors">🗑️</button>
                     </div>
@@ -1749,6 +1774,98 @@
             const pool = teacherPools.find(p => p.id === poolId);
             if (!pool) return;
             showQrCode(pool.name, `${pool.players.length} joueurs — à scanner par les élèves de cette poule`, buildPoolSetupPayload(pool));
+        }
+
+        // --- CÔTÉ ENSEIGNANT : SAISIE MANUELLE DES RÉSULTATS D'UNE POULE ---
+        // Réutilise exactement le même moteur (calendrier de matchs équilibré,
+        // saisie de score, classement) que le tableau de bord élève, mais piloté
+        // depuis la tablette du prof, sans passer par un QR code.
+        function startManualResultsEntry(poolId) {
+            const pool = teacherPools.find(p => p.id === poolId);
+            if (!pool) return;
+
+            if (!pool.manualSession && pool.results) {
+                const confirmed = confirm(
+                    'Cette poule a déjà des résultats reçus par QR code. ' +
+                    'Démarrer la saisie manuelle crée un nouveau calendrier de matchs ' +
+                    'et remplacera ces résultats dès la première saisie. Continuer ?'
+                );
+                if (!confirmed) return;
+            }
+
+            teacherManualEntryPoolId = pool.id;
+            currentPoolId = pool.id;
+            currentPoolName = pool.name;
+            MIN_MATCH_TARGET = pool.target;
+            pointsConfig = pool.points;
+            justFinishedMatchId = null;
+
+            if (pool.manualSession) {
+                allPlayers = pool.manualSession.allPlayers;
+                selectedMatchesForTournament = pool.manualSession.selectedMatchesForTournament;
+            } else {
+                allPlayers = pool.players.map(name => ({ name, matchResults: [] }));
+                const allPossibleMatches = generateAllPossibleMatches();
+                selectedMatchesForTournament = selectBalancedMatches(allPossibleMatches, allPlayers, MIN_MATCH_TARGET);
+                pool.manualSession = { allPlayers, selectedMatchesForTournament };
+                saveTeacherPools();
+            }
+
+            showScreen('main');
+            teacherManualBanner.textContent = `Mode enseignant — saisie manuelle pour la poule « ${pool.name} »`;
+            teacherManualBanner.classList.remove('hidden');
+            studentDashboardActions.classList.add('hidden');
+            teacherManualActions.classList.remove('hidden');
+            generationInfo.textContent = '';
+            dashboardContent.classList.remove('hidden');
+            updateGenerationInfo();
+            renderAll();
+        }
+
+        // Appelée par saveState() pendant la saisie manuelle : au lieu d'écraser la
+        // sauvegarde élève (tournamentData_v7), on persiste dans la poule elle-même,
+        // au même format que les résultats reçus par QR code.
+        function syncManualSessionToPool() {
+            const pool = teacherPools.find(p => p.id === teacherManualEntryPoolId);
+            if (!pool) return;
+
+            pool.manualSession = { allPlayers, selectedMatchesForTournament };
+            pool.results = {
+                receivedAt: new Date().toISOString(),
+                scoreboard: computeScoreboard(allPlayers, MIN_MATCH_TARGET),
+                matches: selectedMatchesForTournament.filter(m => m.winner !== null).map(m => [
+                    m.teamA.players.map(p => pool.players.indexOf(p.name)),
+                    m.teamB.players.map(p => pool.players.indexOf(p.name)),
+                    m.winner, m.scoreA, m.scoreB
+                ]),
+                players: pool.players
+            };
+            saveTeacherPools();
+        }
+
+        function exitManualResultsEntry() {
+            teacherManualEntryPoolId = null;
+            teacherManualBanner.classList.add('hidden');
+            studentDashboardActions.classList.remove('hidden');
+            teacherManualActions.classList.add('hidden');
+            showScreen('teacher');
+            renderTeacherPools();
+        }
+
+        function resetManualResultsEntry() {
+            const pool = teacherPools.find(p => p.id === teacherManualEntryPoolId);
+            if (!pool) return;
+            if (!confirm('Recommencer les matchs de cette poule depuis le début ?')) return;
+
+            allPlayers = pool.players.map(name => ({ name, matchResults: [] }));
+            const allPossibleMatches = generateAllPossibleMatches();
+            selectedMatchesForTournament = selectBalancedMatches(allPossibleMatches, allPlayers, MIN_MATCH_TARGET);
+            justFinishedMatchId = null;
+            pool.manualSession = { allPlayers, selectedMatchesForTournament };
+            pool.results = null;
+            saveTeacherPools();
+            updateGenerationInfo();
+            renderAll();
         }
 
         // Décode le QR "results" scanné sur la tablette d'un élève et met à jour
@@ -1875,6 +1992,8 @@
         teacherAddPoolButton.addEventListener('click', addTeacherPool);
         teacherScanResultsButton.addEventListener('click', () => openQrScanModal("Scanner les résultats d'une poule", applyPoolResultsPayload));
         teacherResetButton.addEventListener('click', resetTeacherApp);
+        teacherManualBackButton.addEventListener('click', exitManualResultsEntry);
+        teacherManualResetButton.addEventListener('click', resetManualResultsEntry);
 
         qrDisplayCloseButton.addEventListener('click', closeQrDisplayModal);
         qrScanCancelButton.addEventListener('click', closeQrScanModal);
@@ -1929,6 +2048,7 @@
                 renderAll();
             }
             if (teacherAction === 'show-qr') showPoolSetupQr(poolId);
+            if (teacherAction === 'manual-results') startManualResultsEntry(poolId);
             if (teacherAction === 'view-results') openPoolResultsModal(poolId);
             if (teacherAction === 'delete-pool') deleteTeacherPool(poolId);
         });
